@@ -7,6 +7,7 @@ mod raycaster;
 use framebuffer::Framebuffer;
 use map::load_maze;
 use player::Player;
+use raycaster::cast_ray;
 
 const BLACK: u32 = 0x000000;
 const WHITE: u32 = 0xFFFFFF;
@@ -29,6 +30,13 @@ fn main() {
         player.angle
     );
 
+    let distance = cast_ray(
+        &maze,
+        &player,
+        player.angle,
+    );
+
+println!("Distancia del primer rayo: {:.2}", distance);
     let mut framebuffer = Framebuffer::new(800, 600, BLACK);
 
     framebuffer.set_pixel(400, 300, WHITE);

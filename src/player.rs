@@ -8,8 +8,8 @@ pub struct Player {
 impl Player {
     pub fn new() -> Self {
         Self {
-            x: 2.5,
-            y: 2.5,
+            x: 1.5,
+            y: 1.5,
             angle: 0.0,
             fov: std::f32::consts::FRAC_PI_3,
         }

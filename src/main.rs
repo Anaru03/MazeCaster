@@ -7,13 +7,14 @@ mod raycaster;
 use framebuffer::Framebuffer;
 use map::load_maze;
 use player::Player;
-use raycaster::{cast_ray, draw_ray};
+use raycaster::{cast_ray, draw_ray, draw_stake};
 
 const BLACK: u32 = 0x000000;
+const YELLOW: u32 = 0xD1BC2E;
 const WHITE: u32 = 0xFFFFFF;
-const YELLOW: u32 = 0xFFFF00;
 
 const BLOCK_SIZE: i32 = 20;
+const NUM_RAYS: usize = 5;
 
 fn main() {
     let maze = load_maze("maze.txt");
@@ -44,7 +45,7 @@ fn main() {
                         framebuffer.set_pixel(
                             x as i32 * BLOCK_SIZE + px,
                             y as i32 * BLOCK_SIZE + py,
-                            WHITE,
+                            YELLOW,
                         );
                     }
                 }
@@ -62,30 +63,51 @@ fn main() {
             framebuffer.set_pixel(
                 player_screen_x + x,
                 player_screen_y + y,
-                YELLOW,
+                WHITE,
             );
         }
     }
 
-    // Lanzar el primer rayo
-    let distance = cast_ray(
+    // Lanzar 5 rayos dentro del FOV
+    for i in 0..NUM_RAYS {
+        let ray_fraction = i as f32 / (NUM_RAYS - 1) as f32;
+
+        let angle =
+            player.angle - player.fov / 2.0
+            + player.fov * ray_fraction;
+
+        let distance = cast_ray(
+            &maze,
+            &player,
+            angle,
+        );
+
+        draw_ray(
+            &mut framebuffer,
+            &player,
+            angle,
+            distance,
+            BLOCK_SIZE,
+        );
+    }
+
+    // Obtener la distancia del rayo central
+    let center_distance = cast_ray(
         &maze,
         &player,
         player.angle,
     );
 
     println!(
-        "Distancia del primer rayo: {:.2}",
-        distance
+        "Distancia del rayo central: {:.2}",
+        center_distance
     );
 
-    // Dibujar el rayo
-    draw_ray(
+    // Convertir la distancia del rayo central en una estaca
+    draw_stake(
         &mut framebuffer,
-        &player,
-        player.angle,
-        distance,
-        BLOCK_SIZE,
+        600,
+        center_distance,
     );
 
     framebuffer.render_to_file("out.bmp");

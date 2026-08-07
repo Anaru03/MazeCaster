@@ -60,6 +60,7 @@ pub fn draw_ray(
         let screen_x = (ray_x * block_size as f32) as i32;
         let screen_y = (ray_y * block_size as f32) as i32;
 
+        //Aparece el rayo
         framebuffer.set_pixel(
             screen_x,
             screen_y,
@@ -67,5 +68,27 @@ pub fn draw_ray(
         );
 
         current_distance += step;
+    }
+}
+
+pub fn draw_stake(
+    framebuffer: &mut Framebuffer,
+    x: i32,
+    distance: f32,
+) {
+    let screen_height = framebuffer.height as i32;
+    let horizon = screen_height / 2;
+
+    let wall_height = (screen_height as f32 / distance) as i32;
+
+    let top = horizon - wall_height / 2;
+    let bottom = horizon + wall_height / 2;
+
+    for y in top..=bottom {
+        framebuffer.set_pixel(
+            x,
+            y,
+            0xD1BC2E,
+        );
     }
 }

@@ -14,7 +14,7 @@ const YELLOW: u32 = 0xD1BC2E;
 const WHITE: u32 = 0xFFFFFF;
 
 const BLOCK_SIZE: i32 = 20;
-const NUM_RAYS: usize = 5;
+const NUM_RAYS: usize = 300;
 
 fn main() {
     let maze = load_maze("maze.txt");
@@ -82,6 +82,7 @@ fn main() {
             angle,
         );
 
+        // Dibujar el rayo en la vista 2D
         draw_ray(
             &mut framebuffer,
             &player,
@@ -89,26 +90,17 @@ fn main() {
             distance,
             BLOCK_SIZE,
         );
+
+        // Posicion horizontal de cada estaca
+        let stake_x = 520 + i as i32 * 50;
+
+        // Convertir la distancia del rayo en una estaca
+        draw_stake(
+            &mut framebuffer,
+            stake_x,
+            distance,
+        );
     }
-
-    // Obtener la distancia del rayo central
-    let center_distance = cast_ray(
-        &maze,
-        &player,
-        player.angle,
-    );
-
-    println!(
-        "Distancia del rayo central: {:.2}",
-        center_distance
-    );
-
-    // Convertir la distancia del rayo central en una estaca
-    draw_stake(
-        &mut framebuffer,
-        600,
-        center_distance,
-    );
 
     framebuffer.render_to_file("out.bmp");
 }

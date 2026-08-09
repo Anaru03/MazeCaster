@@ -5,7 +5,7 @@ mod player;
 mod raycaster;
 
 use framebuffer::Framebuffer;
-use map::{load_maze, Maze};
+use map::{Maze, load_maze};
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use player::Player;
 use raycaster::{cast_ray, draw_ray, draw_stake};
@@ -13,18 +13,19 @@ use raycaster::{cast_ray, draw_ray, draw_stake};
 const WIDTH: usize = 800;
 const HEIGHT: usize = 600;
 
+// Colores 2D
 const BLACK: u32 = 0x000000;
-const RED: u32 = 0xFF5757;
-const BLUE: u32 = 0x12A8E8;
+const WALL_2D: u32 = 0xD4C957;
 const WHITE: u32 = 0xFFFFFF;
-const GREEN: u32 = 0x00FF00;
+const GREEN: u32 = 0x4FAE4F;
+
+// Colores 3D
+const CEILING: u32 = 0xA69A3F;
+const WALL: u32 = 0xD4C957;
+const FLOOR: u32 = 0x766C32;
 
 const NUM_RAYS_2D: usize = 5;
-
-// Velocidad del jugador
 const MOVE_SPEED: f32 = 0.10;
-
-// Velocidad de rotacion
 const ROTATION_SPEED: f32 = 0.08;
 
 enum ViewMode {
@@ -32,35 +33,23 @@ enum ViewMode {
     Mode3D,
 }
 
-// VISTA 2D
-fn render_2d(
-    framebuffer: &mut Framebuffer,
-    maze: &Maze,
-    player: &Player,
-    block_size: i32,
-) {
-    // Dibujar laberinto
+// Vista 2D
+fn render_2d(framebuffer: &mut Framebuffer, maze: &Maze, player: &Player, block_size: i32) {
+    // Laberinto y meta
     for (y, row) in maze.iter().enumerate() {
         for (x, cell) in row.iter().enumerate() {
-            let color = match *cell {
-                '+' | '-' => Some(RED),
-                '|' => Some(BLUE),
-                _ => None,
-            };
-
-            if let Some(wall_color) = color {
+            if matches!(*cell, '+' | '-' | '|') {
                 for py in 0..block_size {
                     for px in 0..block_size {
                         framebuffer.set_pixel(
                             x as i32 * block_size + px,
                             y as i32 * block_size + py,
-                            wall_color,
+                            WALL_2D,
                         );
                     }
                 }
             }
 
-            // Dibujar meta
             if *cell == 'g' {
                 let center_x = x as i32 * block_size + block_size / 2;
                 let center_y = y as i32 * block_size + block_size / 2;
@@ -74,7 +63,7 @@ fn render_2d(
         }
     }
 
-    // JUGADOR
+    // Jugador
     let player_x = (player.x * block_size as f32) as i32;
     let player_y = (player.y * block_size as f32) as i32;
 
@@ -84,7 +73,7 @@ fn render_2d(
         }
     }
 
-    // RAYOS DEL FOV
+    // Rayos del FOV
     for i in 0..NUM_RAYS_2D {
         let ray_fraction = i as f32 / (NUM_RAYS_2D - 1) as f32;
         let angle = player.angle - player.fov / 2.0 + player.fov * ray_fraction;
@@ -94,12 +83,24 @@ fn render_2d(
     }
 }
 
-// VISTA 3D
-fn render_3d(
-    framebuffer: &mut Framebuffer,
-    maze: &Maze,
-    player: &Player,
-) {
+// Vista 3D
+fn render_3d(framebuffer: &mut Framebuffer, maze: &Maze, player: &Player) {
+    let horizon = HEIGHT / 2;
+
+    // Techo
+    for y in 0..horizon {
+        for x in 0..WIDTH {
+            framebuffer.set_pixel(x as i32, y as i32, CEILING);
+        }
+    }
+
+    // Piso
+    for y in horizon..HEIGHT {
+        for x in 0..WIDTH {
+            framebuffer.set_pixel(x as i32, y as i32, FLOOR);
+        }
+    }
+
     // Un rayo por columna
     for x in 0..WIDTH {
         let ray_fraction = x as f32 / (WIDTH - 1) as f32;
@@ -109,20 +110,20 @@ fn render_3d(
         // Correccion fisheye
         let corrected_distance = distance * (angle - player.angle).cos();
 
-        draw_stake(framebuffer, x as i32, corrected_distance);
+        draw_stake(framebuffer, x as i32, corrected_distance, player.fov, WALL);
     }
 }
 
-// CONVERTIR FRAMEBUFFER
+// Convierte RGB para minifb
 fn framebuffer_to_window(framebuffer: &Framebuffer) -> Vec<u32> {
     let mut window_buffer = vec![0u32; framebuffer.width * framebuffer.height];
 
-    for i in 0..framebuffer.width * framebuffer.height {
+    for (i, pixel) in window_buffer.iter_mut().enumerate() {
         let r = framebuffer.buffer[i * 3] as u32;
         let g = framebuffer.buffer[i * 3 + 1] as u32;
         let b = framebuffer.buffer[i * 3 + 2] as u32;
 
-        window_buffer[i] = (r << 16) | (g << 8) | b;
+        *pixel = (r << 16) | (g << 8) | b;
     }
 
     window_buffer
@@ -131,13 +132,11 @@ fn framebuffer_to_window(framebuffer: &Framebuffer) -> Vec<u32> {
 fn main() {
     let maze = load_maze("maze.txt");
 
-    // Ajustar el mapa al tamaño de la ventana
+    // Ajustar mapa a la ventana
     let maze_width = maze.iter().map(|row| row.len()).max().unwrap_or(1);
     let block_size = (WIDTH / maze_width).min(HEIGHT / maze.len()) as i32;
 
-    println!("Mapa cargado: {} filas", maze.len());
-
-    // Buscar posicion inicial del jugador
+    // Buscar inicio
     let mut start_x = 1.5;
     let mut start_y = 1.5;
 
@@ -154,11 +153,6 @@ fn main() {
     player.x = start_x;
     player.y = start_y;
 
-    println!(
-        "Jugador: ({}, {}) - Angulo: {}",
-        player.x, player.y, player.angle
-    );
-
     let mut framebuffer = Framebuffer::new(WIDTH, HEIGHT, BLACK);
 
     let mut window = Window::new(
@@ -172,7 +166,7 @@ fn main() {
     let mut view_mode = ViewMode::Mode2D;
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        // MOVIMIENTO
+        // Movimiento
         if window.is_key_down(Key::Up) {
             player.move_forward(&maze, MOVE_SPEED);
         }
@@ -186,7 +180,7 @@ fn main() {
             player.rotate_right(ROTATION_SPEED);
         }
 
-        // CAMBIAR VISTA
+        // Cambiar vista
         if window.is_key_pressed(Key::C, KeyRepeat::No) {
             view_mode = match view_mode {
                 ViewMode::Mode2D => ViewMode::Mode3D,
@@ -196,19 +190,9 @@ fn main() {
 
         framebuffer.clear();
 
-        // DIBUJAR VISTA ACTUAL
         match view_mode {
-            ViewMode::Mode2D => render_2d(
-                &mut framebuffer,
-                &maze,
-                &player,
-                block_size,
-            ),
-            ViewMode::Mode3D => render_3d(
-                &mut framebuffer,
-                &maze,
-                &player,
-            ),
+            ViewMode::Mode2D => render_2d(&mut framebuffer, &maze, &player, block_size),
+            ViewMode::Mode3D => render_3d(&mut framebuffer, &maze, &player),
         }
 
         let window_buffer = framebuffer_to_window(&framebuffer);

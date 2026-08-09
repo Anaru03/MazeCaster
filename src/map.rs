@@ -4,8 +4,7 @@ use std::io::{BufRead, BufReader};
 pub type Maze = Vec<Vec<char>>;
 
 pub fn load_maze(filename: &str) -> Maze {
-    let file = File::open(filename)
-        .expect("No se pudo abrir el archivo del laberinto");
+    let file = File::open(filename).expect("No se pudo abrir el archivo del laberinto");
 
     let reader = BufReader::new(file);
     let mut maze: Maze = Vec::new();

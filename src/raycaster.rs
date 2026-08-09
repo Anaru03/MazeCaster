@@ -2,55 +2,83 @@ use crate::framebuffer::Framebuffer;
 use crate::map::Maze;
 use crate::player::Player;
 
-// Determina si un caracter representa una pared
+// Verifica si una celda es pared
 fn is_wall(cell: char) -> bool {
-    cell == '+'
-        || cell == '-'
-        || cell == '|'
+    matches!(cell, '+' | '-' | '|')
 }
 
-// Lanzar un rayo y devolver la distancia
-pub fn cast_ray(
-    maze: &Maze,
-    player: &Player,
-    angle: f32,
-) -> f32 {
-    let mut distance = 0.0;
-    let step = 0.05;
+// Calcula la distancia hasta una pared con DDA
+pub fn cast_ray(maze: &Maze, player: &Player, angle: f32) -> f32 {
+    let dir_x = angle.cos();
+    let dir_y = angle.sin();
 
-    // No usamos for porque no sabemos
-    // cuantos pasos necesitara el rayo
+    // Celda inicial
+    let mut map_x = player.x as i32;
+    let mut map_y = player.y as i32;
+
+    // Distancia entre lineas de la cuadricula
+    let delta_x = if dir_x == 0.0 {
+        f32::INFINITY
+    } else {
+        (1.0 / dir_x).abs()
+    };
+
+    let delta_y = if dir_y == 0.0 {
+        f32::INFINITY
+    } else {
+        (1.0 / dir_y).abs()
+    };
+
+    // Direccion y distancia inicial
+    let (step_x, mut side_x) = if dir_x < 0.0 {
+        (-1, (player.x - map_x as f32) * delta_x)
+    } else {
+        (1, (map_x as f32 + 1.0 - player.x) * delta_x)
+    };
+
+    let (step_y, mut side_y) = if dir_y < 0.0 {
+        (-1, (player.y - map_y as f32) * delta_y)
+    } else {
+        (1, (map_y as f32 + 1.0 - player.y) * delta_y)
+    };
+
+    // Recorrer la cuadricula
     loop {
-        let ray_x =
-            player.x + angle.cos() * distance;
+        let hit_x = side_x < side_y;
 
-        let ray_y =
-            player.y + angle.sin() * distance;
-
-        let map_x = ray_x as usize;
-        let map_y = ray_y as usize;
+        if hit_x {
+            side_x += delta_x;
+            map_x += step_x;
+        } else {
+            side_y += delta_y;
+            map_y += step_y;
+        }
 
         // Evitar salir del mapa
-        if map_y >= maze.len()
-            || map_x >= maze[map_y].len()
+        if map_y < 0
+            || map_x < 0
+            || map_y as usize >= maze.len()
+            || map_x as usize >= maze[map_y as usize].len()
         {
-            break;
+            return if hit_x {
+                side_x - delta_x
+            } else {
+                side_y - delta_y
+            };
         }
 
-        let cell = maze[map_y][map_x];
-
-        // Detener el rayo cuando encuentre pared
-        if is_wall(cell) {
-            break;
+        // Impacto con pared
+        if is_wall(maze[map_y as usize][map_x as usize]) {
+            return if hit_x {
+                side_x - delta_x
+            } else {
+                side_y - delta_y
+            };
         }
-
-        distance += step;
     }
-
-    distance
 }
 
-// Dibujar un rayo en la vista 2D
+// Dibuja el rayo en 2D
 pub fn draw_ray(
     framebuffer: &mut Framebuffer,
     player: &Player,
@@ -58,66 +86,35 @@ pub fn draw_ray(
     distance: f32,
     block_size: i32,
 ) {
-    let step = 0.05;
-    let mut current_distance = 0.0;
+    let mut current = 0.0;
 
-    while current_distance < distance {
-        let ray_x =
-            player.x
-            + angle.cos() * current_distance;
+    while current < distance {
+        let ray_x = player.x + angle.cos() * current;
+        let ray_y = player.y + angle.sin() * current;
 
-        let ray_y =
-            player.y
-            + angle.sin() * current_distance;
+        let x = (ray_x * block_size as f32) as i32;
+        let y = (ray_y * block_size as f32) as i32;
 
-        let screen_x =
-            (ray_x * block_size as f32) as i32;
-
-        let screen_y =
-            (ray_y * block_size as f32) as i32;
-
-        framebuffer.set_pixel(
-            screen_x,
-            screen_y,
-            0xFFD6D6,
-        );
-
-        current_distance += step;
+        framebuffer.set_pixel(x, y, 0xFFD6D6);
+        current += 0.05;
     }
 }
 
-// Dibujar una estaca en la vista 3D
-pub fn draw_stake(
-    framebuffer: &mut Framebuffer,
-    x: i32,
-    distance: f32,
-) {
-    let screen_height =
-        framebuffer.height as i32;
+// Dibuja una estaca en 3D
+pub fn draw_stake(framebuffer: &mut Framebuffer, x: i32, distance: f32, fov: f32, color: u32) {
+    let width = framebuffer.width as f32;
+    let height = framebuffer.height as i32;
+    let horizon = height / 2;
 
-    // Horizonte = H / 2
-    let horizon =
-        screen_height / 2;
+    // Proyeccion de la pared
+    let distance = distance.max(0.01);
+    let projection = (width / 2.0) / (fov / 2.0).tan();
+    let wall_height = (projection / distance) as i32;
 
-    let safe_distance =
-        distance.max(0.01);
-
-    // Cerca = pared grande
-    // Lejos = pared pequena
-    let wall_height =
-        (screen_height as f32 / safe_distance) as i32;
-
-    let top =
-        horizon - wall_height / 2;
-
-    let bottom =
-        horizon + wall_height / 2;
+    let top = (horizon - wall_height / 2).max(0);
+    let bottom = (horizon + wall_height / 2).min(height - 1);
 
     for y in top..=bottom {
-        framebuffer.set_pixel(
-            x,
-            y,
-            0xD1BC2E,
-        );
+        framebuffer.set_pixel(x, y, color);
     }
 }

@@ -5,102 +5,216 @@ mod player;
 mod raycaster;
 
 use framebuffer::Framebuffer;
-use map::load_maze;
+use map::{load_maze, Maze};
+use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use player::Player;
 use raycaster::{cast_ray, draw_ray, draw_stake};
 
+const WIDTH: usize = 800;
+const HEIGHT: usize = 600;
+
 const BLACK: u32 = 0x000000;
-const YELLOW: u32 = 0xD1BC2E;
+const RED: u32 = 0xFF5757;
+const BLUE: u32 = 0x12A8E8;
 const WHITE: u32 = 0xFFFFFF;
+const GREEN: u32 = 0x00FF00;
 
-const BLOCK_SIZE: i32 = 20;
-const NUM_RAYS: usize = 300;
+const NUM_RAYS_2D: usize = 5;
 
-fn main() {
-    let maze = load_maze("maze.txt");
+// Velocidad del jugador
+const MOVE_SPEED: f32 = 0.10;
 
-    println!(
-        "Mapa cargado: {} filas x {} columnas",
-        maze.len(),
-        maze[0].len()
-    );
+// Velocidad de rotacion
+const ROTATION_SPEED: f32 = 0.08;
 
-    let player = Player::new();
+enum ViewMode {
+    Mode2D,
+    Mode3D,
+}
 
-    println!(
-        "Jugador: ({}, {}) - Angulo: {}",
-        player.x,
-        player.y,
-        player.angle
-    );
-
-    let mut framebuffer = Framebuffer::new(800, 600, BLACK);
-
-    // Dibujar las paredes del laberinto
+// VISTA 2D
+fn render_2d(
+    framebuffer: &mut Framebuffer,
+    maze: &Maze,
+    player: &Player,
+    block_size: i32,
+) {
+    // Dibujar laberinto
     for (y, row) in maze.iter().enumerate() {
         for (x, cell) in row.iter().enumerate() {
-            if *cell == '#' {
-                for py in 0..BLOCK_SIZE {
-                    for px in 0..BLOCK_SIZE {
+            let color = match *cell {
+                '+' | '-' => Some(RED),
+                '|' => Some(BLUE),
+                _ => None,
+            };
+
+            if let Some(wall_color) = color {
+                for py in 0..block_size {
+                    for px in 0..block_size {
                         framebuffer.set_pixel(
-                            x as i32 * BLOCK_SIZE + px,
-                            y as i32 * BLOCK_SIZE + py,
-                            YELLOW,
+                            x as i32 * block_size + px,
+                            y as i32 * block_size + py,
+                            wall_color,
                         );
+                    }
+                }
+            }
+
+            // Dibujar meta
+            if *cell == 'g' {
+                let center_x = x as i32 * block_size + block_size / 2;
+                let center_y = y as i32 * block_size + block_size / 2;
+
+                for py in -5..=5 {
+                    for px in -5..=5 {
+                        framebuffer.set_pixel(center_x + px, center_y + py, GREEN);
                     }
                 }
             }
         }
     }
 
-    // Convertir la posicion del jugador a pixeles
-    let player_screen_x = (player.x * BLOCK_SIZE as f32) as i32;
-    let player_screen_y = (player.y * BLOCK_SIZE as f32) as i32;
+    // JUGADOR
+    let player_x = (player.x * block_size as f32) as i32;
+    let player_y = (player.y * block_size as f32) as i32;
 
-    // Dibujar al jugador
     for y in -3..=3 {
         for x in -3..=3 {
-            framebuffer.set_pixel(
-                player_screen_x + x,
-                player_screen_y + y,
-                WHITE,
-            );
+            framebuffer.set_pixel(player_x + x, player_y + y, WHITE);
         }
     }
 
-    // Lanzar 5 rayos dentro del FOV
-    for i in 0..NUM_RAYS {
-        let ray_fraction = i as f32 / (NUM_RAYS - 1) as f32;
+    // RAYOS DEL FOV
+    for i in 0..NUM_RAYS_2D {
+        let ray_fraction = i as f32 / (NUM_RAYS_2D - 1) as f32;
+        let angle = player.angle - player.fov / 2.0 + player.fov * ray_fraction;
+        let distance = cast_ray(maze, player, angle);
 
-        let angle =
-            player.angle - player.fov / 2.0
-            + player.fov * ray_fraction;
+        draw_ray(framebuffer, player, angle, distance, block_size);
+    }
+}
 
-        let distance = cast_ray(
-            &maze,
-            &player,
-            angle,
-        );
+// VISTA 3D
+fn render_3d(
+    framebuffer: &mut Framebuffer,
+    maze: &Maze,
+    player: &Player,
+) {
+    // Un rayo por columna
+    for x in 0..WIDTH {
+        let ray_fraction = x as f32 / (WIDTH - 1) as f32;
+        let angle = player.angle - player.fov / 2.0 + player.fov * ray_fraction;
+        let distance = cast_ray(maze, player, angle);
 
-        // Dibujar el rayo en la vista 2D
-        draw_ray(
-            &mut framebuffer,
-            &player,
-            angle,
-            distance,
-            BLOCK_SIZE,
-        );
+        // Correccion fisheye
+        let corrected_distance = distance * (angle - player.angle).cos();
 
-        // Posicion horizontal de cada estaca
-        let stake_x = 520 + i as i32 * 50;
+        draw_stake(framebuffer, x as i32, corrected_distance);
+    }
+}
 
-        // Convertir la distancia del rayo en una estaca
-        draw_stake(
-            &mut framebuffer,
-            stake_x,
-            distance,
-        );
+// CONVERTIR FRAMEBUFFER
+fn framebuffer_to_window(framebuffer: &Framebuffer) -> Vec<u32> {
+    let mut window_buffer = vec![0u32; framebuffer.width * framebuffer.height];
+
+    for i in 0..framebuffer.width * framebuffer.height {
+        let r = framebuffer.buffer[i * 3] as u32;
+        let g = framebuffer.buffer[i * 3 + 1] as u32;
+        let b = framebuffer.buffer[i * 3 + 2] as u32;
+
+        window_buffer[i] = (r << 16) | (g << 8) | b;
     }
 
-    framebuffer.render_to_file("out.bmp");
+    window_buffer
+}
+
+fn main() {
+    let maze = load_maze("maze.txt");
+
+    // Ajustar el mapa al tamaño de la ventana
+    let maze_width = maze.iter().map(|row| row.len()).max().unwrap_or(1);
+    let block_size = (WIDTH / maze_width).min(HEIGHT / maze.len()) as i32;
+
+    println!("Mapa cargado: {} filas", maze.len());
+
+    // Buscar posicion inicial del jugador
+    let mut start_x = 1.5;
+    let mut start_y = 1.5;
+
+    for (y, row) in maze.iter().enumerate() {
+        for (x, cell) in row.iter().enumerate() {
+            if *cell == 'p' {
+                start_x = x as f32 + 0.5;
+                start_y = y as f32 + 0.5;
+            }
+        }
+    }
+
+    let mut player = Player::new();
+    player.x = start_x;
+    player.y = start_y;
+
+    println!(
+        "Jugador: ({}, {}) - Angulo: {}",
+        player.x, player.y, player.angle
+    );
+
+    let mut framebuffer = Framebuffer::new(WIDTH, HEIGHT, BLACK);
+
+    let mut window = Window::new(
+        "MazeCaster | Flechas: mover | C: vista | ESC: salir",
+        WIDTH,
+        HEIGHT,
+        WindowOptions::default(),
+    )
+    .expect("No se pudo crear la ventana");
+
+    let mut view_mode = ViewMode::Mode2D;
+
+    while window.is_open() && !window.is_key_down(Key::Escape) {
+        // MOVIMIENTO
+        if window.is_key_down(Key::Up) {
+            player.move_forward(&maze, MOVE_SPEED);
+        }
+        if window.is_key_down(Key::Down) {
+            player.move_backward(&maze, MOVE_SPEED);
+        }
+        if window.is_key_down(Key::Left) {
+            player.rotate_left(ROTATION_SPEED);
+        }
+        if window.is_key_down(Key::Right) {
+            player.rotate_right(ROTATION_SPEED);
+        }
+
+        // CAMBIAR VISTA
+        if window.is_key_pressed(Key::C, KeyRepeat::No) {
+            view_mode = match view_mode {
+                ViewMode::Mode2D => ViewMode::Mode3D,
+                ViewMode::Mode3D => ViewMode::Mode2D,
+            };
+        }
+
+        framebuffer.clear();
+
+        // DIBUJAR VISTA ACTUAL
+        match view_mode {
+            ViewMode::Mode2D => render_2d(
+                &mut framebuffer,
+                &maze,
+                &player,
+                block_size,
+            ),
+            ViewMode::Mode3D => render_3d(
+                &mut framebuffer,
+                &maze,
+                &player,
+            ),
+        }
+
+        let window_buffer = framebuffer_to_window(&framebuffer);
+
+        window
+            .update_with_buffer(&window_buffer, WIDTH, HEIGHT)
+            .expect("No se pudo actualizar la ventana");
+    }
 }

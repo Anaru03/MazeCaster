@@ -59,4 +59,15 @@ impl Player {
     pub fn rotate_right(&mut self, speed: f32) {
         self.angle += speed;
     }
+
+    pub fn reached_goal(&self, maze: &Maze) -> bool {
+        let map_x = self.x as usize;
+        let map_y = self.y as usize;
+
+        if map_y >= maze.len() || map_x >= maze[map_y].len() {
+            return false;
+        }
+
+        maze[map_y][map_x] == 'g'
+    }
 }

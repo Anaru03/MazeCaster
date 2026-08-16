@@ -164,6 +164,7 @@ fn main() {
     .expect("No se pudo crear la ventana");
 
     let mut view_mode = ViewMode::Mode2D;
+    let mut won = false;
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         // Movimiento
@@ -200,5 +201,23 @@ fn main() {
         window
             .update_with_buffer(&window_buffer, WIDTH, HEIGHT)
             .expect("No se pudo actualizar la ventana");
+
+        if window.is_key_down(Key::Up) {
+            player.move_forward(&maze, MOVE_SPEED);
+        }
+        if window.is_key_down(Key::Down) {
+            player.move_backward(&maze, MOVE_SPEED);
+        }
+        if window.is_key_down(Key::Left) {
+            player.rotate_left(ROTATION_SPEED);
+        }
+        if window.is_key_down(Key::Right) {
+            player.rotate_right(ROTATION_SPEED);
+        }
+
+        if player.reached_goal(&maze) && !won {
+            println!("Has sobrevivido la priemra noche");
+            won = true;
+        }
     }
 }

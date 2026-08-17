@@ -8,11 +8,12 @@ mod text;
 mod texture;
 
 use audio::Audio;
-use framebuffer::{rgb, Framebuffer};
-use map::{load_maze, Maze};
+use framebuffer::{Framebuffer, rgb};
+use map::{Maze, load_maze};
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use player::Player;
 use raycaster::{cast_ray, draw_ray, draw_stake};
+use std::f32::consts::PI;
 use std::time::Instant;
 use text::draw_text;
 use texture::Texture;
@@ -30,10 +31,12 @@ const BLACK: u32 = rgb(0, 0, 0);
 const WHITE: u32 = rgb(255, 255, 255);
 const PLAYER_COLOR: u32 = rgb(0, 255, 255);
 const GOAL_COLOR: u32 = rgb(0, 255, 0);
+const WIN_COLOR: u32 = rgb(180, 25, 25);
 
 const NUM_RAYS_2D: usize = 5;
 const MOVE_SPEED: f32 = 6.0;
 const ROTATION_SPEED: f32 = 4.0;
+const SPRITE_SPEED: f32 = 1.0;
 
 enum ViewMode {
     Mode2D,
@@ -96,14 +99,14 @@ fn render_2d(framebuffer: &mut Framebuffer, maze: &Maze, player: &Player) {
     for i in 0..NUM_RAYS_2D {
         let fraction = i as f32 / (NUM_RAYS_2D - 1) as f32;
         let angle = player.angle - player.fov / 2.0 + player.fov * fraction;
-        let (distance, _) = cast_ray(maze, player, angle);
+
+        let (distance, _, _) = cast_ray(maze, player, angle);
 
         draw_ray(framebuffer, player, angle, distance, block_size);
     }
 }
 
-fn render_plane(framebuffer: &mut Framebuffer, player: &Player, texture: &Texture, ceiling: bool,) {
-
+fn render_plane(framebuffer: &mut Framebuffer, player: &Player, texture: &Texture, ceiling: bool) {
     let width = framebuffer.width;
     let height = framebuffer.height;
     let horizon = height / 2;
@@ -134,6 +137,7 @@ fn render_plane(framebuffer: &mut Framebuffer, player: &Player, texture: &Textur
         };
 
         let distance = (height as f32 / 2.0) / p;
+
         let step_x = distance * (ray_x1 - ray_x0) / width as f32;
         let step_y = distance * (ray_y1 - ray_y0) / width as f32;
 
@@ -152,13 +156,78 @@ fn render_plane(framebuffer: &mut Framebuffer, player: &Player, texture: &Textur
     }
 }
 
+fn render_sprite(
+    framebuffer: &mut Framebuffer,
+    maze: &Maze,
+    player: &Player,
+    texture: &Texture,
+    sprite_x: f32,
+    sprite_y: f32,
+) {
+    let dx = sprite_x - player.x;
+    let dy = sprite_y - player.y;
+
+    let distance = (dx * dx + dy * dy).sqrt();
+    let sprite_angle = dy.atan2(dx);
+
+    let mut angle_diff = sprite_angle - player.angle;
+
+    while angle_diff > PI {
+        angle_diff -= 2.0 * PI;
+    }
+
+    while angle_diff < -PI {
+        angle_diff += 2.0 * PI;
+    }
+
+    if angle_diff.abs() > player.fov / 2.0 {
+        return;
+    }
+
+    let (wall_distance, _, _) = cast_ray(maze, player, sprite_angle);
+
+    if distance >= wall_distance {
+        return;
+    }
+
+    let width = framebuffer.width as f32;
+    let height = framebuffer.height as f32;
+
+    let center_x = width / 2.0 + (angle_diff / (player.fov / 2.0)) * (width / 2.0);
+
+    let sprite_height = (height / distance.max(0.1)) as i32;
+
+    let sprite_width = (sprite_height as f32 * texture.width as f32 / texture.height as f32) as i32;
+
+    let left = center_x as i32 - sprite_width / 2;
+    let top = framebuffer.height as i32 / 2 - sprite_height / 2;
+
+    for y in 0..sprite_height {
+        for x in 0..sprite_width {
+            let u = x as f32 / sprite_width as f32;
+            let v = y as f32 / sprite_height as f32;
+
+            if texture.is_transparent(u, v) {
+                continue;
+            }
+
+            let color = texture.get_color(u, v);
+
+            framebuffer.set_pixel(left + x, top + y, color);
+        }
+    }
+}
+
 fn render_3d(
     framebuffer: &mut Framebuffer,
     maze: &Maze,
     player: &Player,
     wall: &Texture,
+    exit: &Texture,
     ceiling: &Texture,
     floor: &Texture,
+    freddy: &Texture,
+    freddys: &[(f32, f32)],
 ) {
     render_plane(framebuffer, player, ceiling, true);
     render_plane(framebuffer, player, floor, false);
@@ -169,10 +238,23 @@ fn render_3d(
         let fraction = x as f32 / (width - 1) as f32;
         let angle = player.angle - player.fov / 2.0 + player.fov * fraction;
 
-        let (distance, texture_u) = cast_ray(maze, player, angle);
+        let (distance, texture_u, is_exit) = cast_ray(maze, player, angle);
         let corrected_distance = distance * (angle - player.angle).cos();
 
-        draw_stake(framebuffer, x as i32, distance, player.fov, texture_u, wall);
+        let texture = if is_exit { exit } else { wall };
+
+        draw_stake(
+            framebuffer,
+            x as i32,
+            corrected_distance,
+            player.fov,
+            texture_u,
+            texture,
+        );
+    }
+
+    for &(freddy_x, freddy_y) in freddys {
+        render_sprite(framebuffer, maze, player, freddy, freddy_x, freddy_y);
     }
 }
 
@@ -212,11 +294,7 @@ fn draw_mini(framebuffer: &mut Framebuffer, mini: &Framebuffer) {
                 mini.buffer[index + 2] as u32,
             );
 
-            framebuffer.set_pixel(
-                (start_x + x) as i32,
-                (start_y + y) as i32,
-                color,
-            );
+            framebuffer.set_pixel((start_x + x) as i32, (start_y + y) as i32, color);
         }
     }
 
@@ -257,6 +335,14 @@ fn render_menu(framebuffer: &mut Framebuffer, image: &Texture, option: usize) {
     draw_text(framebuffer, taylor, 90, 350, 3, WHITE);
 }
 
+fn render_win(framebuffer: &mut Framebuffer, image: &Texture) {
+    render_image(framebuffer, image);
+
+    draw_text(framebuffer, "HAS SOBREVIVIDO", 245, 270, 3, WIN_COLOR);
+    draw_text(framebuffer, "LA PRIMERA NOCHE", 220, 320, 3, WIN_COLOR);
+    draw_text(framebuffer, "ENTER - MENU", 300, 430, 2, WIN_COLOR);
+}
+
 fn framebuffer_to_window(framebuffer: &Framebuffer) -> Vec<u32> {
     let mut output = vec![0; framebuffer.width * framebuffer.height];
 
@@ -275,20 +361,31 @@ fn main() {
     let maze = load_maze("maze.txt");
 
     let wall = Texture::load("assets/wall.jpeg");
+    let exit = Texture::load("assets/Exit_door.jpg");
     let ceiling = Texture::load("assets/techo.jpg");
     let floor = Texture::load("assets/floor.jpg");
     let inicio = Texture::load("assets/Inicio.jpg");
+    let win_screen = Texture::load("assets/Win_screen.jpg");
+
+    let freddy_r = Texture::load("assets/Freddy_R.png");
+    let freddy_l = Texture::load("assets/Freddy_L.png");
 
     let audio = Audio::new();
 
     let mut start_x = 1.5;
     let mut start_y = 1.5;
 
+    let mut freddys = Vec::new();
+
     for (y, row) in maze.iter().enumerate() {
         for (x, cell) in row.iter().enumerate() {
             if *cell == 'p' {
                 start_x = x as f32 + 0.5;
                 start_y = y as f32 + 0.5;
+            }
+
+            if *cell == 'f' {
+                freddys.push((x as f32 + 0.5, y as f32 + 0.5));
             }
         }
     }
@@ -313,14 +410,24 @@ fn main() {
     let mut option = 0;
     let mut view = ViewMode::Mode3D;
     let mut won = false;
+
     let mut last_frame = Instant::now();
+    let animation_start = Instant::now();
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let now = Instant::now();
         let delta_time = now.duration_since(last_frame).as_secs_f32();
         last_frame = now;
 
-        if playing && window.is_key_down(Key::M) {
+        let animation_time = animation_start.elapsed().as_secs_f32();
+
+        let freddy = if (animation_time / SPRITE_SPEED) as i32 % 2 == 0 {
+            &freddy_r
+        } else {
+            &freddy_l
+        };
+
+        if playing && !won && window.is_key_down(Key::M) {
             audio.stop_music();
 
             player.x = start_x;
@@ -328,7 +435,6 @@ fn main() {
             player.angle = 0.0;
 
             playing = false;
-            won = false;
             view = ViewMode::Mode3D;
         }
 
@@ -347,11 +453,25 @@ fn main() {
                 }
 
                 playing = true;
+                won = false;
                 last_frame = Instant::now();
             }
 
             framebuffer.clear();
             render_menu(&mut framebuffer, &inicio, option);
+        } else if won {
+            framebuffer.clear();
+            render_win(&mut framebuffer, &win_screen);
+
+            if window.is_key_pressed(Key::Enter, KeyRepeat::No) {
+                player.x = start_x;
+                player.y = start_y;
+                player.angle = 0.0;
+
+                playing = false;
+                won = false;
+                view = ViewMode::Mode3D;
+            }
         } else {
             let move_amount = MOVE_SPEED * delta_time;
             let rotation_amount = ROTATION_SPEED * delta_time;
@@ -379,7 +499,7 @@ fn main() {
                 };
             }
 
-            if player.reached_goal(&maze) && !won {
+            if player.reached_goal(&maze) {
                 audio.stop_music();
                 audio.play_effect("assets/sounds/Win.mp3");
                 println!("Has sobrevivido la primera noche");
@@ -393,14 +513,28 @@ fn main() {
                 ViewMode::Mode3D => {
                     render_buffer.clear();
 
-                    render_3d(&mut render_buffer, &maze, &player, &wall, &ceiling, &floor);
+                    render_3d(
+                        &mut render_buffer,
+                        &maze,
+                        &player,
+                        &wall,
+                        &exit,
+                        &ceiling,
+                        &floor,
+                        freddy,
+                        &freddys,
+                    );
+
                     scale_3d(&render_buffer, &mut framebuffer);
                     render_2d(&mut mini, &maze, &player);
                 }
 
                 ViewMode::Mode2D => {
                     render_2d(&mut framebuffer, &maze, &player);
-                    render_3d(&mut mini, &maze, &player, &wall, &ceiling, &floor);
+
+                    render_3d(
+                        &mut mini, &maze, &player, &wall, &exit, &ceiling, &floor, freddy, &freddys,
+                    );
                 }
             }
 

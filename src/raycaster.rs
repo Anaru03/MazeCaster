@@ -7,7 +7,7 @@ fn is_wall(cell: char) -> bool {
     matches!(cell, '+' | '-' | '|')
 }
 
-pub fn cast_ray(maze: &Maze, player: &Player, angle: f32) -> (f32, f32) {
+pub fn cast_ray(maze: &Maze, player: &Player, angle: f32) -> (f32, f32, bool) {
     let dir_x = angle.cos();
     let dir_y = angle.sin();
 
@@ -56,20 +56,26 @@ pub fn cast_ray(maze: &Maze, player: &Player, angle: f32) -> (f32, f32) {
             || map_y as usize >= maze.len()
             || map_x as usize >= maze[map_y as usize].len()
         {
-            return (distance, 0.0);
+            return (distance, 0.0, false);
         }
 
-        if is_wall(maze[map_y as usize][map_x as usize]) {
+        let cell = maze[map_y as usize][map_x as usize];
+
+        if is_wall(cell) || cell == 'g' {
             let hit_x_pos = player.x + distance * dir_x;
             let hit_y_pos = player.y + distance * dir_y;
 
-            let texture_u = if hit_x {
-                hit_y_pos.fract()
+            let mut texture_u = if hit_x {
+                hit_y_pos.rem_euclid(1.0)
             } else {
-                hit_x_pos.fract()
+                hit_x_pos.rem_euclid(1.0)
             };
 
-            return (distance, texture_u);
+            if cell == 'g' {
+                texture_u = 1.0 - texture_u;
+            }
+
+            return (distance, texture_u, cell == 'g');
         }
     }
 }

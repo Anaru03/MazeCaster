@@ -1,3 +1,7 @@
+pub const fn rgb(r: u32, g: u32, b: u32) -> u32 {
+    (r << 16) | (g << 8) | b
+}
+
 pub struct Framebuffer {
     pub width: usize,
     pub height: usize,
@@ -18,7 +22,6 @@ impl Framebuffer {
         fb
     }
 
-    // Limpia el framebuffer
     pub fn clear(&mut self) {
         let (r, g, b) = Self::unpack_color(self.background_color);
 
@@ -29,7 +32,6 @@ impl Framebuffer {
         }
     }
 
-    // Dibuja un pixel
     pub fn set_pixel(&mut self, x: i32, y: i32, color: u32) {
         if x < 0 || y < 0 || x as usize >= self.width || y as usize >= self.height {
             return;
@@ -43,11 +45,10 @@ impl Framebuffer {
         self.buffer[idx + 2] = b;
     }
 
-    // Separa un color RGB
     fn unpack_color(color: u32) -> (u8, u8, u8) {
-        let r = ((color >> 16) & 0xFF) as u8;
-        let g = ((color >> 8) & 0xFF) as u8;
-        let b = (color & 0xFF) as u8;
+        let r = ((color >> 16) & 255) as u8;
+        let g = ((color >> 8) & 255) as u8;
+        let b = (color & 255) as u8;
 
         (r, g, b)
     }

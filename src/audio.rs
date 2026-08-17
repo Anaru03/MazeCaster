@@ -9,9 +9,7 @@ pub struct Audio {
 
 impl Audio {
     pub fn new() -> Self {
-        let device =
-            DeviceSinkBuilder::open_default_sink()
-                .expect("No se pudo iniciar el audio");
+        let device = DeviceSinkBuilder::open_default_sink().expect("No se pudo iniciar el audio");
 
         let music = Player::connect_new(device.mixer());
         let effects = Player::connect_new(device.mixer());
@@ -24,8 +22,7 @@ impl Audio {
     }
 
     pub fn play_music(&self, path: &str) {
-        let file = File::open(path)
-            .expect("No se pudo abrir la musica");
+        let file = File::open(path).expect("No se pudo abrir la musica");
 
         let source = Decoder::try_from(file)
             .expect("No se pudo reproducir la musica")
@@ -39,11 +36,9 @@ impl Audio {
     }
 
     pub fn play_effect(&self, path: &str) {
-        let file = File::open(path)
-            .expect("No se pudo abrir el efecto");
+        let file = File::open(path).expect("No se pudo abrir el efecto");
 
-        let source = Decoder::try_from(file)
-            .expect("No se pudo reproducir el efecto");
+        let source = Decoder::try_from(file).expect("No se pudo reproducir el efecto");
 
         self.effects.append(source);
     }

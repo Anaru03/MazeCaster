@@ -1,4 +1,4 @@
-use crate::framebuffer::Framebuffer;
+use crate::framebuffer::{Framebuffer, rgb};
 use crate::map::Maze;
 use crate::player::Player;
 use crate::texture::Texture;
@@ -82,6 +82,7 @@ pub fn draw_ray(
     block_size: i32,
 ) {
     let mut current = 0.0;
+    let red = rgb(255, 0, 0);
 
     while current < distance {
         let ray_x = player.x + angle.cos() * current;
@@ -90,7 +91,9 @@ pub fn draw_ray(
         let x = (ray_x * block_size as f32) as i32;
         let y = (ray_y * block_size as f32) as i32;
 
-        framebuffer.set_pixel(x, y, 0xFFD6D6);
+        framebuffer.set_pixel(x, y, red);
+        framebuffer.set_pixel(x + 1, y, red);
+        framebuffer.set_pixel(x, y + 1, red);
 
         current += 0.05;
     }

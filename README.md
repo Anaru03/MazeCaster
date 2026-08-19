@@ -52,22 +52,6 @@ El nivel se construye a partir de `maze.txt`, por lo que su estructura puede mod
   <i>Explora el laberinto, encuentra a Golden Freddy y busca la salida.</i>
 </p>
 
-La vista principal utiliza raycasting para representar el laberinto en pseudo-3D. En la esquina inferior derecha permanece visible el mapa 2D.
-
-<br>
-
-### Encuentra la salida
-
-<p align="center">
-  <img src="assets/screenshots/Exit_screen.png" width="75%" />
-</p>
-
-<p align="center">
-  <i>La salida está cerca. Golden Freddy también.</i>
-</p>
-
-La puerta de salida utiliza su propia textura dentro del mundo 3D y Golden Freddy aparece como un sprite animado dentro del laberinto.
-
 ---
 
 ## Features
@@ -107,10 +91,10 @@ Es la vista principal en primera persona.
 
 Utiliza raycasting para representar:
 
-- paredes;
-- piso;
-- techo;
-- puerta de salida;
+- Paredes
+- Piso
+- Techo
+- Puerta de salida
 - Golden Freddy.
 
 Mientras la vista 3D está activa, la representación 2D aparece en la esquina inferior derecha.
@@ -150,7 +134,7 @@ La tecla `C` permite cambiar entre ambas vistas durante la partida.
 ---
 
 ## Controles
-
+ncuentra la salida
 | Tecla | Acción |
 |:---:|---|
 | `↑` | Avanzar |
@@ -162,52 +146,6 @@ La tecla `C` permite cambiar entre ambas vistas durante la partida.
 | `Enter` | Confirmar / continuar |
 | `Esc` | Salir |
 
----
-
-## Leyenda del mapa
-
-El laberinto se define mediante `maze.txt`.
-
-| Símbolo | Función |
-|:---:|---|
-| `+` | Pared |
-| `-` | Pared |
-| `\|` | Pared |
-| `p` | Inicio del jugador |
-| `f` | Golden Freddy |
-| `g` | Meta / puerta de salida |
-| Espacio | Zona transitable |
-
-
-
----
-
-## Conceptos implementados
-
-El proyecto utiliza diferentes conceptos de gráficas por computadora y programación.
-
-
-- Raycasting DDA en tiempo real
-- Corrección del efecto fish-eye
-- Paredes completamente texturizadas
-- Piso y techo texturizados
-- Puerta de salida integrada al mundo 3D
-- Golden Freddy como sprite animado de dos frames
-- Soporte para múltiples sprites mediante `f` en el mapa
-- Transparencia RGBA para los sprites
-- Perspectiva de sprites según su distancia
-- Oclusión de sprites detrás de paredes
-- Minimapa en la esquina
-- Vista intercambiable entre primera persona 3D y mapa 2D
-- Música de fondo seleccionable desde el menú
-- Modo especial `Start With Taylor`
-- Efecto de sonido al completar el laberinto
-- Pantalla de inicio
-- Pantalla de victoria
-- Sistema de colisiones
-- Movimiento independiente del rendimiento mediante delta time
-- Renderizado 3D optimizado a resolución interna reducida
-- Manejo de colores mediante RGB
 ---
 
 ## Cómo correrlo
@@ -277,7 +215,7 @@ cargo build
 
 ## Demo
 
-> Falta mi video :/
+> [Proyecto 1 - MazeCaster | Raycasting en Rust](https://youtu.be/IEwkMMpn6vA)
 
 ---
 

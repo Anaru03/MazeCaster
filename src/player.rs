@@ -26,7 +26,7 @@ impl Player {
             return false;
         }
 
-        !matches!(maze[map_y][map_x], '+' | '-' | '|')
+        !matches!(maze[map_y][map_x], '+' | '-' | '|' | 'x')
     }
 
     // Avanzar

@@ -4,10 +4,10 @@ use crate::player::Player;
 use crate::texture::Texture;
 
 fn is_wall(cell: char) -> bool {
-    matches!(cell, '+' | '-' | '|')
+    matches!(cell, '+' | '-' | '|' | 'x' )  
 }
 
-pub fn cast_ray(maze: &Maze, player: &Player, angle: f32) -> (f32, f32, bool) {
+pub fn cast_ray(maze: &Maze, player: &Player, angle: f32) -> (f32, f32, char) {
     let dir_x = angle.cos();
     let dir_y = angle.sin();
 
@@ -56,7 +56,7 @@ pub fn cast_ray(maze: &Maze, player: &Player, angle: f32) -> (f32, f32, bool) {
             || map_y as usize >= maze.len()
             || map_x as usize >= maze[map_y as usize].len()
         {
-            return (distance, 0.0, false);
+            return (distance, 0.0, ' ');
         }
 
         let cell = maze[map_y as usize][map_x as usize];
@@ -75,7 +75,7 @@ pub fn cast_ray(maze: &Maze, player: &Player, angle: f32) -> (f32, f32, bool) {
                 texture_u = 1.0 - texture_u;
             }
 
-            return (distance, texture_u, cell == 'g');
+            return (distance, texture_u, cell);
         }
     }
 }

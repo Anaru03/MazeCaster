@@ -55,7 +55,7 @@ fn render_2d(framebuffer: &mut Framebuffer, maze: &Maze, player: &Player) {
 
     for (y, row) in maze.iter().enumerate() {
         for (x, cell) in row.iter().enumerate() {
-            if !matches!(*cell, '+' | '-' | '|') {
+            if !matches!(*cell, '+' | '-' | '|' | 'x') {
                 let size = (block_size / 4).max(1);
 
                 for py in 0..block_size {
@@ -223,6 +223,7 @@ fn render_3d(
     maze: &Maze,
     player: &Player,
     wall: &Texture,
+    poster_wall: &Texture,
     exit: &Texture,
     ceiling: &Texture,
     floor: &Texture,
@@ -238,10 +239,14 @@ fn render_3d(
         let fraction = x as f32 / (width - 1) as f32;
         let angle = player.angle - player.fov / 2.0 + player.fov * fraction;
 
-        let (distance, texture_u, is_exit) = cast_ray(maze, player, angle);
+        let (distance, texture_u, cell) = cast_ray(maze, player, angle);
         let corrected_distance = distance * (angle - player.angle).cos();
 
-        let texture = if is_exit { exit } else { wall };
+        let texture = match cell {
+            'g' => exit,
+            'x' => poster_wall,
+            _ => wall,
+        };
 
         draw_stake(
             framebuffer,
@@ -361,6 +366,7 @@ fn main() {
     let maze = load_maze("maze.txt");
 
     let wall = Texture::load("assets/wall.jpeg");
+    let poster_wall = Texture::load("assets/poster_wall.png");
     let exit = Texture::load("assets/Exit_door.jpg");
     let ceiling = Texture::load("assets/techo.jpg");
     let floor = Texture::load("assets/floor.jpg");
@@ -518,6 +524,7 @@ fn main() {
                         &maze,
                         &player,
                         &wall,
+                        &poster_wall,
                         &exit,
                         &ceiling,
                         &floor,
@@ -533,7 +540,16 @@ fn main() {
                     render_2d(&mut framebuffer, &maze, &player);
 
                     render_3d(
-                        &mut mini, &maze, &player, &wall, &exit, &ceiling, &floor, freddy, &freddys,
+                        &mut mini,
+                        &maze,
+                        &player,
+                        &wall,
+                        &poster_wall,
+                        &exit,
+                        &ceiling,
+                        &floor,
+                        freddy,
+                        &freddys,
                     );
                 }
             }
